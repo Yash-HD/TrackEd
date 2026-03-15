@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             String              @id @default(uuid())
+  identifier     String              @unique
+  firstName      String
+  middleName     String?
+  lastName       String
+  email          String              @unique
+  passwordHash   String
+  role           Role
+  gender         Gender
+  dateOfBirth    DateTime
+  departmentId   String?
+  semester       Int?
+  division       String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  attendances    Attendance[]
+  leaveApprovals LeaveRequest[]      @relation("LeaveApprover")
+  leaveRequests  LeaveRequest[]      @relation("UserLeaves")
+  taughtSubjects Subject[]           @relation("SubjectFaculty")
+  schedules      TimetableSchedule[]
+  department     Department?         @relation(fields: [departmentId], references: [id])
+}
+
+model Department {
+  id        String              @id @default(uuid())
+  name      String              @unique
+  code      String              @unique
+  subjects  Subject[]
+  schedules TimetableSchedule[]
+  users     User[]
+}
+
+model Subject {
+  id           String              @id @default(uuid())
+  name         String
+  code         String              @unique
+  credits      Int
+  departmentId String
+  facultyId    String?
+  department   Department          @relation(fields: [departmentId], references: [id])
+  faculty      User?               @relation("SubjectFaculty", fields: [facultyId], references: [id])
+  schedules    TimetableSchedule[]
+}
+
+model TimetableSchedule {
+  id           String         @id @default(uuid())
+  subjectId    String
+  facultyId    String
+  departmentId String
+  semester     Int
+  division     String?
+  dayOfWeek    DayOfWeek
+  startTime    DateTime       @db.Time(6)
+  endTime      DateTime       @db.Time(6)
+  type         ClassType
+  sessions     ClassSession[]
+  department   Department     @relation(fields: [departmentId], references: [id])
+  faculty      User           @relation(fields: [facultyId], references: [id])
+  subject      Subject        @relation(fields: [subjectId], references: [id])
+}
+
+model ClassSession {
+  id          String            @id @default(uuid())
+  scheduleId  String
+  date        DateTime          @db.Date
+  status      String            @default("SCHEDULED")
+  createdAt   DateTime          @default(now())
+  attendances Attendance[]
+  schedule    TimetableSchedule @relation(fields: [scheduleId], references: [id])
+}
+
+model Attendance {
+  id        String           @id @default(uuid())
+  sessionId String
+  studentId String
+  status    AttendanceStatus
+  markedAt  DateTime         @default(now())
+  markedBy  String?
+  latitude  Float?
+  longitude Float?
+  session   ClassSession     @relation(fields: [sessionId], references: [id])
+  student   User             @relation(fields: [studentId], references: [id])
+
+  @@unique([sessionId, studentId])
+}
+
+model LeaveRequest {
+  id           String      @id @default(uuid())
+  userId       String
+  type         LeaveType
+  startDate    DateTime    @db.Date
+  endDate      DateTime    @db.Date
+  reason       String
+  status       LeaveStatus @default(PENDING)
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime    @default(now())
+  reviewedBy   User?       @relation("LeaveApprover", fields: [reviewedById], references: [id])
+  user         User        @relation("UserLeaves", fields: [userId], references: [id])
+}
+
+enum Role {
+  ADMIN
+  FACULTY
+  STUDENT
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum ClassType {
+  LECTURE
+  LAB
+  SEMINAR
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+}
+
+enum LeaveType {
+  MEDICAL
+  CASUAL
+  DUTY
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
