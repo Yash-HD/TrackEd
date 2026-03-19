@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { FaBuilding, FaBirthdayCake, FaUser, FaLock, FaIdCard, FaCog } from 'react-icons/fa';
+import React from 'react';
+import { FaBuilding, FaUser, FaLock, FaIdCard, FaCog } from 'react-icons/fa';
 import MainLayout from '../../components/student/MainLayout';
 import { motion } from 'framer-motion';
+import { useAuth } from '../../contexts/AuthProvider';
 
 const InfoField = ({ icon, label, value }) => (
     <div className="flex items-center justify-between py-4 border-b border-platinum-100 dark:border-onyx-700/50 last:border-b-0 group">
@@ -16,44 +17,30 @@ const InfoField = ({ icon, label, value }) => (
 );
 
 export default function ProfilePage() {
-    const [userData, setUserData] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const { user } = useAuth();
 
-    useEffect(() => {
-        const fetchProfileData = () => {
-            setTimeout(() => {
-                const mockData = {
-                    first_name: "Rohan",
-                    middle_name: "",
-                    last_name: "Kumar",
-                    roll_number: "202430063",
-                    date_of_birth: "2002-05-15",
-                    gender: "male",
-                    department: "Computer Engineering",
-                    email: "rohan.kumar@student.edu"
-                };
-                setUserData(mockData);
-                setIsLoading(false);
-            }, 800);
-        };
-        fetchProfileData();
-    }, []);
+    // Use data from the auth context (stored at login time)
+    // The user object has: id, firstName, lastName, email, role, departmentId
+    if (!user) {
+        return <MainLayout><div className="flex items-center justify-center p-20 text-onyx-500 font-bold animate-pulse">Loading profile...</div></MainLayout>;
+    }
+
+    const userData = {
+        first_name: user.firstName || '',
+        middle_name: '',
+        last_name: user.lastName || '',
+        roll_number: user.identifier || user.id?.slice(0, 12) || 'N/A',
+        department: user.departmentName || 'Department',
+        email: user.email || 'N/A',
+    };
 
     const handlePasswordChange = (e) => {
         e.preventDefault();
         alert("Password update logic to be implemented!");
     };
 
-    if (isLoading || !userData) {
-        return <MainLayout><div className="flex items-center justify-center p-20 text-onyx-500 font-bold animate-pulse">Loading profile securely...</div></MainLayout>;
-    }
-
-    const fullName = `${userData.first_name} ${userData.middle_name || ''} ${userData.last_name}`;
+    const fullName = `${userData.first_name} ${userData.middle_name || ''} ${userData.last_name}`.trim();
     const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=108389&color=fff&size=256&bold=true`;
-    
-    const formattedDob = new Date(userData.date_of_birth).toLocaleDateString('en-GB', {
-        day: 'numeric', month: 'long', year: 'numeric'
-    });
 
     const containerVariants = {
         hidden: { opacity: 0 },
@@ -117,8 +104,7 @@ export default function ProfilePage() {
                                 </h3>
                                 <div className="flex flex-col">
                                     <InfoField icon={<FaBuilding />} label="Academic Unit" value={userData.department} />
-                                    <InfoField icon={<FaBirthdayCake />} label="Date of Birth" value={formattedDob} />
-                                    <InfoField icon={<FaUser />} label="Gender" value={userData.gender.charAt(0).toUpperCase() + userData.gender.slice(1)} />
+                                    <InfoField icon={<FaUser />} label="Email" value={userData.email} />
                                 </div>
                             </div>
                         </motion.div>

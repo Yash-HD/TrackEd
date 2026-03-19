@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { FaThLarge, FaUsers, FaChartPie, FaCalendarCheck, FaUserCircle, FaSignOutAlt, FaSun, FaMoon, FaBars } from 'react-icons/fa';
 import { useTheme } from '../../contexts/ThemeProvider';
+import { useAuth } from '../../contexts/AuthProvider';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const Sidebar = ({ isOpen, onClose, currentPath }) => {
@@ -68,7 +69,7 @@ const Sidebar = ({ isOpen, onClose, currentPath }) => {
                     })}
 
                     <div className="mt-auto pt-6 pb-4">
-                        <Link to="/" className="flex items-center gap-4 px-4 py-3.5 rounded-2xl text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors group">
+                        <Link to="/" onClick={() => window.location.href = '/'} className="flex items-center gap-4 px-4 py-3.5 rounded-2xl text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors group">
                             <FaSignOutAlt className="text-xl opacity-70 group-hover:opacity-100" />
                             <span className="font-bold tracking-wide">Secure Logout</span>
                         </Link>
@@ -82,6 +83,7 @@ const Sidebar = ({ isOpen, onClose, currentPath }) => {
 const Header = ({ onMenuClick, isDarkMode, onThemeToggle, title }) => {
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const dropdownRef = useRef(null);
+    const { user, logout } = useAuth();
 
     useEffect(() => {
         const onClickOutside = (e) => {
@@ -138,13 +140,13 @@ const Header = ({ onMenuClick, isDarkMode, onThemeToggle, title }) => {
                             className="flex items-center gap-3 p-1.5 pr-4 rounded-2xl bg-white dark:bg-onyx-800 border border-platinum-200 dark:border-onyx-700 shadow-sm hover:border-dark-teal-300 dark:hover:border-onyx-600 transition-all"
                         >
                             <img
-                                src="https://ui-avatars.com/api/?name=Dr+Sharma&background=108389&color=fff&bold=true"
+                                src={`https://ui-avatars.com/api/?name=${user?.firstName}+${user?.lastName}&background=108389&color=fff&bold=true`}
                                 alt="Avatar"
                                 className="h-10 w-10 rounded-xl"
                             />
                             <div className="hidden md:flex flex-col items-start leading-tight">
-                                <span className="text-sm font-extrabold text-onyx-900 dark:text-platinum-50 tracking-tight">Dr. Sharma</span>
-                                <span className="text-xs font-bold text-dark-teal-600 dark:text-stormy-teal-400">Computer Science</span>
+                                <span className="text-sm font-extrabold text-onyx-900 dark:text-platinum-50 tracking-tight">{user?.firstName} {user?.lastName}</span>
+                                <span className="text-xs font-bold text-dark-teal-600 dark:text-stormy-teal-400">Faculty</span>
                             </div>
                         </button>
                         
@@ -161,9 +163,9 @@ const Header = ({ onMenuClick, isDarkMode, onThemeToggle, title }) => {
                                         <FaUserCircle className="text-lg text-onyx-400" /> View Identity
                                     </Link>
                                     <div className="h-px bg-platinum-200 dark:bg-onyx-700 my-1 mx-2"></div>
-                                    <Link to="/" className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-xl transition-colors">
+                                    <button onClick={logout} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-xl transition-colors">
                                         <FaSignOutAlt className="text-lg" /> Override & Exit
-                                    </Link>
+                                    </button>
                                 </motion.div>
                             )}
                         </AnimatePresence>

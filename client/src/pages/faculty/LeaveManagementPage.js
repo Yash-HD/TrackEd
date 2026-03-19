@@ -1,33 +1,59 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaUserGraduate, FaCalendarPlus, FaCheckCircle, FaTimesCircle, FaClock, FaCheck, FaTimes, FaCalendarAlt } from 'react-icons/fa';
-
-// MOCK DATA for Student Leave Requests
-const mockStudentRequests = [
-    { id: 1, studentName: 'Rahul Kumar', rollNo: '24BCS102', type: 'Medical Leave', days: 3, dates: '10 Oct - 12 Oct', reason: 'Viral Fever, doctor advised rest.', status: 'Pending', avatarMatch: 'RK' },
-    { id: 2, studentName: 'Sneha Patel', rollNo: '24BCS089', type: 'Duty Leave', days: 1, dates: '15 Oct', reason: 'Attending Inter- कॉलेज Hackathon at IIT Bombay.', status: 'Pending', avatarMatch: 'SP' },
-    { id: 3, studentName: 'Aditya Verma', rollNo: '24BCS144', type: 'Casual Leave', days: 2, dates: '18 Oct - 19 Oct', reason: 'Family gathering in hometown.', status: 'Pending', avatarMatch: 'AV' },
-];
-
-// MOCK DATA for Faculty's own leaves
-const mockMyHistory = [
-    { type: 'Casual Leave (CL)', startDate: '12 Oct, 2024', endDate: '14 Oct, 2024', status: 'Approved' },
-    { type: 'Medical Leave (ML)', startDate: '03 Sep, 2024', endDate: '05 Sep, 2024', status: 'Approved' },
-];
+import { getPendingLeaves, reviewLeave, applyLeave, getLeaveHistory } from '../../api/facultyService';
 
 export default function LeaveManagementPage() {
-    const [activeTab, setActiveTab] = useState('approvals'); // 'approvals' or 'apply'
+    const [activeTab, setActiveTab] = useState('approvals');
     const [leaveType, setLeaveType] = useState('Casual Leave (CL)');
-    const [studentRequests, setStudentRequests] = useState(mockStudentRequests);
+    const [studentRequests, setStudentRequests] = useState([]);
+    const [myHistory, setMyHistory] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
-    const handleTeacherSubmit = (e) => {
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const [pending, history] = await Promise.all([
+                    getPendingLeaves(),
+                    getLeaveHistory(),
+                ]);
+                setStudentRequests(pending || []);
+                setMyHistory(history || []);
+            } catch (err) {
+                setError(err.message || 'Failed to load leave data');
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, []);
+
+    const handleTeacherSubmit = async (e) => {
         e.preventDefault();
-        alert("Your leave request has been submitted to the HOD.");
+        try {
+            const formData = new FormData(e.target);
+            await applyLeave({
+                type: leaveType,
+                startDate: formData.get('startDate'),
+                endDate: formData.get('endDate'),
+                reason: formData.get('reason'),
+            });
+            alert('Your leave request has been submitted to the HOD.');
+            const history = await getLeaveHistory();
+            setMyHistory(history || []);
+        } catch (err) {
+            alert(err.message || 'Failed to submit leave request');
+        }
     };
 
-    const handleAction = (id, action) => {
-        // In real app, this would hit API. For now, filter it out of pending list.
-        setStudentRequests(prev => prev.filter(req => req.id !== id));
+    const handleAction = async (id, action) => {
+        try {
+            await reviewLeave(id, action);
+            setStudentRequests(prev => prev.filter(req => req.id !== id));
+        } catch (err) {
+            alert(err.message || 'Failed to process request');
+        }
     };
 
     // Shared Form Components
@@ -43,6 +69,13 @@ export default function LeaveManagementPage() {
             <textarea className="w-full bg-white/50 dark:bg-onyx-900/50 backdrop-blur-sm border border-platinum-200 dark:border-onyx-700/60 rounded-xl px-4 py-3 text-sm font-bold text-onyx-900 dark:text-platinum-50 focus:outline-none focus:ring-2 focus:ring-dark-teal-500/50 transition-all shadow-inner resize-none min-h-[120px]" {...props} />
         </div>
     );
+
+    if (loading) {
+        return <div className="flex items-center justify-center p-20 text-onyx-500 font-bold animate-pulse">Loading Leave Data...</div>;
+    }
+    if (error) {
+        return <div className="flex items-center justify-center p-20 text-red-500 font-bold">{error}</div>;
+    }
 
     return (
         <div className="relative pb-10">
@@ -217,10 +250,10 @@ export default function LeaveManagementPage() {
                                         </select>
                                     </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                        <GlassInput label="Start Date" type="date" required />
-                                        <GlassInput label="End Date" type="date" required />
+                                        <GlassInput label="Start Date" type="date" name="startDate" required />
+                                        <GlassInput label="End Date" type="date" name="endDate" required />
                                     </div>
-                                    <GlassTextarea label="Reason / Remarks" placeholder="State your reason..." required />
+                                    <GlassTextarea label="Reason / Remarks" name="reason" placeholder="State your reason..." required />
                                     <button type="submit" className="mt-4 w-full bg-gradient-to-r from-dark-teal-500 to-stormy-teal-600 text-white font-black uppercase tracking-widest py-4 rounded-xl shadow-[0_8px_30px_rgba(27,218,228,0.2)] hover:shadow-[0_8px_30px_rgba(27,218,228,0.4)] transition-all active:scale-[0.98]">
                                         Submit Request to HOD
                                     </button>
@@ -234,10 +267,11 @@ export default function LeaveManagementPage() {
                                     <h3 className="font-black text-sm uppercase tracking-widest text-onyx-900 dark:text-platinum-50">My History</h3>
                                 </div>
                                 <div className="flex flex-col gap-3">
-                                    {mockMyHistory.map((req, i) => (
+                                    {myHistory.map((req, i) => (
                                         <div key={i} className="bg-white dark:bg-onyx-800 border-l-4 border-emerald-500 rounded-xl p-3 shadow-sm">
                                             <p className="font-extrabold text-sm text-onyx-900 dark:text-platinum-50">{req.type}</p>
                                             <p className="text-xs text-onyx-500">{req.startDate} - {req.endDate}</p>
+                                            <p className="text-[10px] font-bold uppercase tracking-widest mt-1 text-onyx-400">{req.status}</p>
                                         </div>
                                     ))}
                                 </div>

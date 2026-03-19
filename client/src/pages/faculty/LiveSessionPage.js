@@ -1,79 +1,144 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { FaUserCheck, FaUserSlash, FaTimes, FaVideo, FaWifi, FaUserMinus } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
+import { startSession, endSession, manualAttendance, refreshSessionQR } from '../../api/facultyService';
+import { io } from 'socket.io-client';
 
-const initialStudents = [
-    { id: 'S01', name: 'Rohan Kumar' }, { id: 'S02', name: 'Priya Singh' }, { id: 'S03', name: 'Amit Kumar' }, 
-    { id: 'S04', name: 'Anjali Gupta' },{ id: 'S05', name: 'Suresh Patel' }, { id: 'S06', name: 'Meena Reddy' },
-    { id: 'S07', name: 'Vikram Sharma' },{ id: 'S08', name: 'Sneha Joshi' },{ id: 'S09', name: 'Rajesh Verma' },
-    { id: 'S10', name: 'Pooja Desai' },{ id: 'S11', name: 'Arjun Mehta' },{ id: 'S12', name: 'Kavita Iyer' },
-    { id: 'S13', name: 'Manoj Nair' },{ id: 'S14', name: 'Sunita Rao' },{ id: 'S15', name: 'Deepak Choudhary' },
-    { id: 'S16', name: 'Neha Agarwal' },{ id: 'S17', name: 'Sanjay Krishnan' },{ id: 'S18', name: 'Geeta Patil' },
-    { id: 'S19', name: 'Harish Reddy' },{ id: 'S20', name: 'Lata Menon' }
-];
+// Use same backend endpoint port or retrieve from API config.
+// The backend socket.io instance runs on the root path, not the /api namespace
+const rawApiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const SOCKET_URL = rawApiUrl.replace(/\/api\/?$/, '');
 
 export default function LiveSessionPage() {
-    const { classId } = useParams(); 
+    const { classId } = useParams(); // classId = scheduleId
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [sessionId, setSessionId] = useState(null);
     const [qrToken, setQrToken] = useState('generating...');
     const [presentStudents, setPresentStudents] = useState([]);
     const [absentStudents, setAbsentStudents] = useState([]);
-    const simulationStudentQueue = useRef([]);
+    const [totalStudents, setTotalStudents] = useState(0);
 
     useEffect(() => {
-        const fetchInitialData = async () => {
-            setAbsentStudents(initialStudents);
-            simulationStudentQueue.current = [...initialStudents]; 
-            setQrToken(Math.random().toString(36).substring(2));
-            setIsLoading(false);
+        let activeSessionId = null;
+
+        const initSession = async () => {
+            try {
+                const data = await startSession(classId);
+                // data should contain: sessionId, qrToken, students (list)
+                const currentSessionId = data.sessionId || data.id;
+                setSessionId(currentSessionId);
+                activeSessionId = currentSessionId;
+                setQrToken(data.qrToken || Math.random().toString(36).substring(2));
+                const students = data.students || [];
+                setTotalStudents(students.length);
+                setAbsentStudents(data.absentStudents || students);
+                setPresentStudents(data.presentStudents || []);
+
+                // 2. Initialize WebSocket Connection
+                const socket = io(SOCKET_URL);
+                
+                // Join session room via generic 'join_room' or handle backend logic
+                // The backend emits to the sessionId directly without needing a join event if it's auto-joined, 
+                // but usually the client has to tell the server to join a room. 
+                // Since there is no join_room explicit listener in standard, we will just listen to events.
+                // Wait, if no 'join_room' exists, how does the client receive events?
+                // Let's emit a 'join_session' manually just in case the backend socket handles it (if any).
+                socket.emit('join_session', data.sessionId || data.id);
+
+                socket.on('student_joined', (studentInfo) => {
+                    // Move from absent to present
+                    setAbsentStudents(prev => prev.filter(s => s.id !== studentInfo.id));
+                    setPresentStudents(prev => {
+                        // avoid duplicates
+                        if (prev.some(s => s.id === studentInfo.id)) return prev;
+                        return [studentInfo, ...prev];
+                    });
+                });
+
+                socket.on('student_removed', (studentInfo) => {
+                    // Move from present to absent
+                    setPresentStudents(prev => prev.filter(s => s.id !== studentInfo.id));
+                    setAbsentStudents(prev => {
+                        if (prev.some(s => s.id === studentInfo.id)) return prev;
+                        return [studentInfo, ...prev];
+                    });
+                });
+
+                socket.on('qr_refresh', (data) => {
+                    setQrToken(data.qrToken);
+                });
+
+                // Cleanup on unmount
+                return () => {
+                    socket.disconnect();
+                };
+            } catch (err) {
+                setError(err.message || 'Failed to start session');
+            } finally {
+                setIsLoading(false);
+            }
         };
-        fetchInitialData();
-        const qrRefreshInterval = setInterval(() => {
-            setQrToken(Math.random().toString(36).substring(2));
+        const cleanupSocket = initSession();
+
+        const qrRefreshInterval = setInterval(async () => {
+            try {
+                if (!activeSessionId) return;
+                // Hits the backend API which securely requests a new JWT for this session.
+                // The newly generated JWT is returned AND pushed over websocket 'qr_refresh'.
+                const res = await refreshSessionQR(activeSessionId);
+                if (res.qrToken) {
+                    setQrToken(res.qrToken);
+                }
+            } catch (err) {
+                console.error("Failed to refresh QR token", err);
+            }
         }, 15000);
-        return () => clearInterval(qrRefreshInterval);
+
+        return () => {
+            clearInterval(qrRefreshInterval);
+            cleanupSocket.then(cleanup => { if(cleanup) cleanup(); });
+        };
     }, [classId]);
 
-    useEffect(() => {
-        const simulationInterval = setInterval(() => {
-            if (simulationStudentQueue.current.length > 0) {
-                // Determine batch size (1 to 3 students joining at once)
-                const batchSize = Math.floor(Math.random() * 3) + 1;
-                const newStudents = [];
-                for(let i=0; i<batchSize && simulationStudentQueue.current.length > 0; i++) {
-                    newStudents.push(simulationStudentQueue.current.shift());
-                }
-                
-                setPresentStudents(prev => [...newStudents, ...prev]);
-                setAbsentStudents(prev => {
-                    const newIds = newStudents.map(s => s.id);
-                    return prev.filter(s => !newIds.includes(s.id));
-                });
-            } else {
-                clearInterval(simulationInterval);
+    const handleManualMarkPresent = async (studentToMark) => {
+        try {
+            if (sessionId) {
+                await manualAttendance(sessionId, studentToMark.id, 'PRESENT');
             }
-        }, 3000); // Shorter interval for testing
-        return () => clearInterval(simulationInterval);
-    }, []);
-
-    const handleManualMarkPresent = (studentToMark) => {
-        simulationStudentQueue.current = simulationStudentQueue.current.filter(s => s.id !== studentToMark.id);
-        setAbsentStudents(current => current.filter(s => s.id !== studentToMark.id));
-        setPresentStudents(current => [studentToMark, ...current]);
-    };
-    
-    const handleManualMarkAbsent = (studentToMark) => {
-        setPresentStudents(current => current.filter(s => s.id !== studentToMark.id));
-        setAbsentStudents(current => [studentToMark, ...current]);
+            setAbsentStudents(current => current.filter(s => s.id !== studentToMark.id));
+            setPresentStudents(current => [studentToMark, ...current]);
+        } catch (err) {
+            alert(err.message || 'Failed to mark present');
+        }
     };
 
-    const handleEndSession = () => {
-        if(window.confirm("Are you sure you want to end this live session? All attendance changes will be finalized.")) {
-            alert(`Session Ended. Final Attendance: ${presentStudents.length}/${initialStudents.length}`);
-            navigate('/faculty/dashboard');
+    const handleManualMarkAbsent = async (studentToMark) => {
+        try {
+            if (sessionId) {
+                await manualAttendance(sessionId, studentToMark.id, 'ABSENT');
+            }
+            setPresentStudents(current => current.filter(s => s.id !== studentToMark.id));
+            setAbsentStudents(current => [studentToMark, ...current]);
+        } catch (err) {
+            alert(err.message || 'Failed to mark absent');
+        }
+    };
+
+    const handleEndSession = async () => {
+        if (window.confirm("Are you sure you want to end this live session? All attendance changes will be finalized.")) {
+            try {
+                if (sessionId) {
+                    await endSession(sessionId);
+                }
+                alert(`Session Ended. Final Attendance: ${presentStudents.length}/${totalStudents}`);
+                navigate('/faculty/dashboard');
+            } catch (err) {
+                alert(err.message || 'Failed to end session');
+            }
         }
     };
 
@@ -85,9 +150,13 @@ export default function LiveSessionPage() {
             </div>
         );
     }
-    
-    const totalStudents = initialStudents.length;
-    const attendancePercentage = presentStudents.length === 0 ? 0 : Math.round((presentStudents.length / totalStudents) * 100);
+
+    if (error) {
+        return <div className="flex items-center justify-center p-20 text-red-500 font-bold">{error}</div>;
+    }
+
+    const activeTotal = totalStudents || (presentStudents.length + absentStudents.length);
+    const attendancePercentage = activeTotal === 0 ? 0 : Math.round((presentStudents.length / activeTotal) * 100);
 
     return (
         <div className="relative pb-10">
@@ -97,9 +166,9 @@ export default function LiveSessionPage() {
             </div>
 
             <div className="flex flex-col gap-6 relative z-10 w-full text-onyx-900 dark:text-platinum-50">
-                
+
                 {/* Header Section */}
-                <motion.div 
+                <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="bg-red-50 dark:bg-red-900/10 backdrop-blur-xl border border-red-200 dark:border-red-900/30 shadow-sm rounded-3xl p-6 relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-4"
@@ -119,7 +188,7 @@ export default function LiveSessionPage() {
                         </div>
                     </div>
 
-                    <button 
+                    <button
                         onClick={handleEndSession}
                         className="w-full md:w-auto z-10 flex items-center justify-center gap-2 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-8 py-3.5 rounded-xl font-extrabold uppercase tracking-wide shadow-lg shadow-red-500/20 transition-all active:scale-[0.98]"
                     >
@@ -129,9 +198,9 @@ export default function LiveSessionPage() {
 
                 {/* Primary Grid Layout - Made Responsive */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    
+
                     {/* LEFT COLUMN: QR & Metrics */}
-                    <motion.div 
+                    <motion.div
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.1, type: "spring" }}
@@ -144,7 +213,7 @@ export default function LiveSessionPage() {
                                 <h3 className="text-xl font-black text-onyx-900 dark:text-platinum-50 tracking-tight">Active Scan Beacon</h3>
                                 <p className="text-xs font-bold text-onyx-500 uppercase tracking-widest mt-1">Code rotates every 15s</p>
                             </div>
-                            
+
                             <div className="p-4 bg-white/90 border border-platinum-200 dark:border-onyx-800 rounded-2xl shadow-inner mt-2 mb-4 inline-block relative group">
                                 <div className="absolute inset-0 border-2 border-dark-teal-500/30 rounded-2xl animate-ping opacity-20 hidden md:block group-hover:block"></div>
                                 <QRCodeSVG value={qrToken} size={180} className="relative z-10" />
@@ -157,13 +226,13 @@ export default function LiveSessionPage() {
                             <h3 className="font-extrabold text-lg tracking-tight mb-2 opacity-90">Live Presence</h3>
                             <div className="flex items-baseline gap-2 mb-2">
                                 <span className="text-6xl md:text-7xl font-black">{presentStudents.length}</span>
-                                <span className="text-2xl font-bold opacity-60">/ {totalStudents}</span>
+                                <span className="text-2xl font-bold opacity-60">/ {activeTotal}</span>
                             </div>
-                            
+
                             {/* Progress Bar */}
                             <div className="w-full bg-black/20 rounded-full h-2 mt-4 overflow-hidden border border-white/10">
-                                <div 
-                                    className="bg-emerald-400 h-2 rounded-full transition-all duration-500" 
+                                <div
+                                    className="bg-emerald-400 h-2 rounded-full transition-all duration-500"
                                     style={{ width: `${attendancePercentage}%` }}
                                 ></div>
                             </div>
@@ -171,7 +240,7 @@ export default function LiveSessionPage() {
                     </motion.div>
 
                     {/* RIGHT COLUMN: Student Lists */}
-                    <motion.div 
+                    <motion.div
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.2, type: "spring" }}
@@ -179,7 +248,7 @@ export default function LiveSessionPage() {
                     >
                         {/* Split List Container */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
-                            
+
                             {/* Present List */}
                             <div className="bg-white/70 dark:bg-onyx-800/50 backdrop-blur-xl border border-platinum-200 dark:border-onyx-700/60 rounded-[2rem] p-4 lg:p-6 shadow-sm flex flex-col h-[500px] lg:h-auto">
                                 <div className="flex items-center justify-between mb-4 px-2">
@@ -190,7 +259,7 @@ export default function LiveSessionPage() {
                                 <div className="flex flex-col gap-2 overflow-y-auto pr-2 custom-scrollbar flex-grow">
                                     <AnimatePresence>
                                         {presentStudents.map((student) => (
-                                            <motion.div 
+                                            <motion.div
                                                 key={student.id}
                                                 initial={{ opacity: 0, y: -10, scale: 0.95 }}
                                                 animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -199,14 +268,14 @@ export default function LiveSessionPage() {
                                             >
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 font-black flex items-center justify-center text-xs">
-                                                        {student.name.charAt(0)}
+                                                        {student.firstName.charAt(0) + student.lastName.charAt(0)}
                                                     </div>
                                                     <div>
-                                                        <p className="font-bold text-sm text-onyx-900 dark:text-platinum-50">{student.name}</p>
-                                                        <p className="text-[10px] font-black text-onyx-400 uppercase">{student.id}</p>
+                                                        <p className="font-bold text-sm text-onyx-900 dark:text-platinum-50">{student.firstName + " " + student.lastName}</p>
+
                                                     </div>
                                                 </div>
-                                                <button 
+                                                <button
                                                     onClick={() => handleManualMarkAbsent(student)}
                                                     className="opacity-0 group-hover:opacity-100 md:opacity-100 p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
                                                     title="Mark Absent"
@@ -229,7 +298,7 @@ export default function LiveSessionPage() {
                                 <div className="flex flex-col gap-2 overflow-y-auto pr-2 custom-scrollbar flex-grow">
                                     <AnimatePresence>
                                         {absentStudents.map((student) => (
-                                            <motion.div 
+                                            <motion.div
                                                 key={student.id}
                                                 initial={{ opacity: 0 }}
                                                 animate={{ opacity: 1 }}
@@ -238,14 +307,13 @@ export default function LiveSessionPage() {
                                             >
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 font-black flex items-center justify-center text-xs">
-                                                        {student.name.charAt(0)}
+                                                        {student.firstName.charAt(0) + student.lastName.charAt(0)}
                                                     </div>
                                                     <div>
-                                                        <p className="font-bold text-sm text-onyx-900 dark:text-platinum-50 opacity-70">{student.name}</p>
-                                                        <p className="text-[10px] font-black text-onyx-400 uppercase">{student.id}</p>
+                                                        <p className="font-bold text-sm text-onyx-900 dark:text-platinum-50 opacity-70">{student.firstName + " " + student.lastName}</p>
                                                     </div>
                                                 </div>
-                                                <button 
+                                                <button
                                                     onClick={() => handleManualMarkPresent(student)}
                                                     className="opacity-0 group-hover:opacity-100 md:opacity-100 px-3 py-1.5 text-xs font-bold text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-all border border-emerald-200 dark:border-emerald-800/50"
                                                 >

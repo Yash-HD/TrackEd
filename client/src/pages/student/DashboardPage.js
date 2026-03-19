@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import MainLayout from '../../components/student/MainLayout';
-import { FaQrcode, FaCalendarAlt, FaExclamationTriangle, FaUser } from 'react-icons/fa';
+import { FaQrcode, FaExclamationTriangle, FaUser } from 'react-icons/fa';
 import QRCodeScannerModal from '../../components/student/QRCodeScannerModal';
 import { motion } from 'framer-motion';
+import { getStudentDashboard } from '../../api/studentService';
+import { useAuth } from '../../contexts/AuthProvider';
 
 // SVG Progress Ring Component
 const ProgressRing = ({ percentage, colorClass, size = 80, strokeWidth = 8 }) => {
@@ -48,21 +50,41 @@ const ProgressRing = ({ percentage, colorClass, size = 80, strokeWidth = 8 }) =>
 };
 
 const DashboardPage = () => {
+    const { user } = useAuth();
     const [isScannerOpen, setIsScannerOpen] = useState(false);
+    const [dashboardData, setDashboardData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
-    // Sample data
-    const upcomingClasses = [
-        { time: '11:00 AM', subject: 'Data Structures', faculty: 'Dr. Sharma' },
-        { time: '01:00 PM', subject: 'Operating Systems', faculty: 'Prof. Verma' },
-    ];
-    const subjectData = [
-        { name: 'Data Structures', percentage: 92 },
-        { name: 'Operating Systems', percentage: 74 },
-        { name: 'Database Management', percentage: 85 },
-        { name: 'Computer Networks', percentage: 68 },
-    ];
+    useEffect(() => {
+        const fetchDashboard = async () => {
+            try {
+                const data = await getStudentDashboard();
+                setDashboardData(data);
+            } catch (err) {
+                setError(err.message || 'Failed to load dashboard');
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchDashboard();
+    }, []);
+
+    // Derive data from API response
+    const upcomingClasses = (dashboardData?.todaysClasses || []).map(cls => ({
+        time: new Date(cls.startTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }),
+        subject: cls.subjectName,
+        faculty: cls.faculty,
+    }));
+    const subjectData = (dashboardData?.subjectBreakdown || []).map(s => ({
+        name: s.subjectName,
+        percentage: s.percentage,
+    }));
+    const overallPercentage = dashboardData?.overallAttendancePercentage ?? 0;
+    const atRiskCount = dashboardData?.atRiskCount ?? 0;
 
     const atRiskSubjects = subjectData.filter(subj => subj.percentage < 75);
+    const studentFirstName = dashboardData?.student?.firstName || user?.firstName || 'Student';
 
     const getPercentColor = (pct) => {
         if (pct >= 85) return 'text-green-500 dark:text-green-400';
@@ -88,6 +110,13 @@ const DashboardPage = () => {
         hidden: { opacity: 0, scale: 0.95, y: 30 },
         show: { opacity: 1, scale: 1, y: 0, transition: { type: "spring", stiffness: 200, damping: 20 } }
     };
+
+    if (loading) {
+        return <MainLayout><div className="flex items-center justify-center p-20 text-onyx-500 font-bold animate-pulse">Loading Dashboard...</div></MainLayout>;
+    }
+    if (error) {
+        return <MainLayout><div className="flex items-center justify-center p-20 text-red-500 font-bold">{error}</div></MainLayout>;
+    }
 
     return (
         <MainLayout>
@@ -115,8 +144,8 @@ const DashboardPage = () => {
 
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-8 relative z-10">
                             <div className="max-w-xl">
-                                <h2 className="text-3xl md:text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-onyx-900 to-onyx-600 dark:from-platinum-50 dark:to-platinum-300 pb-2">Welcome back, Rohan.</h2>
-                                <p className="text-onyx-600 dark:text-platinum-300 mt-2 text-lg font-medium leading-relaxed">Your attendance overview is ready. You are currently maintaining excellent standing.</p>
+                                <h2 className="text-3xl md:text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-onyx-900 to-onyx-600 dark:from-platinum-50 dark:to-platinum-300 pb-2">Welcome back, {studentFirstName}.</h2>
+                                <p className="text-onyx-600 dark:text-platinum-300 mt-2 text-lg font-medium leading-relaxed">Your attendance overview is ready. {overallPercentage >= 75 ? 'You are currently maintaining excellent standing.' : 'Some subjects need your attention.'}</p>
                             </div>
 
                             {/* Premium Gradient Button */}
@@ -141,13 +170,13 @@ const DashboardPage = () => {
                         </div>
                         <div className="flex items-center justify-between mt-auto">
                             <div className="flex flex-col">
-                                <span className="text-5xl font-black text-onyx-900 dark:text-platinum-50 tracking-tighter">88<span className="text-2xl text-onyx-400">%</span></span>
-                                <span className="text-sm font-medium text-green-600 dark:text-green-400 mt-2 flex items-center gap-1">
-                                    <span className="w-2 h-2 rounded-full bg-green-500"></span> Excellent Status
+                                <span className="text-5xl font-black text-onyx-900 dark:text-platinum-50 tracking-tighter">{overallPercentage}<span className="text-2xl text-onyx-400">%</span></span>
+                                <span className={`text-sm font-medium ${overallPercentage >= 75 ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'} mt-2 flex items-center gap-1`}>
+                                    <span className={`w-2 h-2 rounded-full ${overallPercentage >= 75 ? 'bg-green-500' : 'bg-amber-500'}`}></span> {overallPercentage >= 75 ? 'Excellent Status' : 'Needs Attention'}
                                 </span>
                             </div>
                             {/* SVG Ring */}
-                            <ProgressRing percentage={88} colorClass="text-green-500 dark:text-green-400" size={90} strokeWidth={10} />
+                            <ProgressRing percentage={overallPercentage} colorClass={overallPercentage >= 75 ? 'text-green-500 dark:text-green-400' : 'text-amber-500 dark:text-amber-400'} size={90} strokeWidth={10} />
                         </div>
                     </motion.div>
 
@@ -157,7 +186,7 @@ const DashboardPage = () => {
                         </div>
                         <div className="flex items-center justify-between mt-auto">
                             <div className="flex flex-col">
-                                <span className="text-5xl font-black text-onyx-900 dark:text-platinum-50 tracking-tighter">02</span>
+                                <span className="text-5xl font-black text-onyx-900 dark:text-platinum-50 tracking-tighter">{String(atRiskCount).padStart(2, '0')}</span>
                                 <span className="text-sm font-medium text-amber-600 dark:text-amber-400 mt-2 flex items-center gap-1">
                                     <span className="w-2 h-2 rounded-full bg-amber-500"></span> Requires Attention
                                 </span>

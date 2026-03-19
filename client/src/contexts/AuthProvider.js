@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-// import axios from 'axios';
+import { login as loginApi } from '../api/authService';
 
 // Create the context
 const AuthContext = createContext(null);
@@ -7,30 +7,24 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [loading, setLoading] = useState(true); // To handle initial auth check
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // This effect runs once when the app starts to check for a saved token
+        // On app start, check if we have a saved token + user in localStorage
         const checkLoggedIn = async () => {
             const token = localStorage.getItem('token');
-            if (token) {
+            const savedUser = localStorage.getItem('user');
+
+            if (token && savedUser) {
                 try {
-                    // In a real app, you would verify the token with the backend
-                    // const response = await axios.post('/api/auth/verify', { token });
-                    // setUser(response.data.user);
-                    // setIsAuthenticated(true);
-
-                    // --- SIMULATION ---
-                    // For now, if a token exists, we'll assume it's valid
-                    // and set a mock user.
-                    const mockUser = { name: 'Rohan Kumar', role: 'student' }; // Example user
-                    setUser(mockUser);
+                    const parsedUser = JSON.parse(savedUser);
+                    setUser(parsedUser);
                     setIsAuthenticated(true);
-
                 } catch (error) {
-                    // Token is invalid or expired
+                    // Corrupted data — clear everything
                     localStorage.removeItem('token');
-                    console.error("Token verification failed", error);
+                    localStorage.removeItem('user');
+                    console.error('Failed to parse saved user', error);
                 }
             }
             setLoading(false);
@@ -39,38 +33,22 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const login = async (credentials, role) => {
-        // --- REAL API CALL (Commented Out) ---
-        // const response = await axios.post(`/api/auth/${role}/login`, credentials);
-        // const { token, user } = response.data;
-        // localStorage.setItem('token', token);
-        // setUser(user);
-        // setIsAuthenticated(true);
-        // return user;
+        // Call the real backend API
+        const { token, user: loggedInUser } = await loginApi(credentials, role);
 
-        // --- SIMULATION ---
-        return new Promise((resolve, reject) => {
-            setTimeout(() => {
-                if (credentials.id === 'FACULTY01' && credentials.password === 'password123' && role === 'faculty') {
-                    const mockUser = { name: 'Dr. Sharma', role: 'faculty' };
-                    localStorage.setItem('token', 'fake-faculty-token');
-                    setUser(mockUser);
-                    setIsAuthenticated(true);
-                    resolve(mockUser);
-                } else if (credentials.id === 'STUDENT01' && credentials.password === 'password123' && role === 'student') {
-                    const mockUser = { name: 'Rohan Kumar', role: 'student' };
-                    localStorage.setItem('token', 'fake-student-token');
-                    setUser(mockUser);
-                    setIsAuthenticated(true);
-                    resolve(mockUser);
-                } else {
-                    reject(new Error("Invalid credentials"));
-                }
-            }, 1000);
-        });
+        // Persist token and user in localStorage
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(loggedInUser));
+
+        setUser(loggedInUser);
+        setIsAuthenticated(true);
+
+        return loggedInUser;
     };
 
     const logout = () => {
         localStorage.removeItem('token');
+        localStorage.removeItem('user');
         setUser(null);
         setIsAuthenticated(false);
     };
@@ -83,7 +61,7 @@ export const AuthProvider = ({ children }) => {
         logout
     };
 
-    // We don't render children until the initial loading check is complete
+    // Don't render children until the initial loading check is complete
     return (
         <AuthContext.Provider value={value}>
             {!loading && children}

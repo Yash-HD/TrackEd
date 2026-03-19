@@ -8,6 +8,7 @@ import DashboardPage from '../pages/student/DashboardPage';
 import AttendancePage from '../pages/student/AttendancePage';
 import TimetablePage from '../pages/student/TimetablePage';
 import ProfilePage from '../pages/student/ProfilePage';
+import HistoryPage from '../pages/student/HistoryPage';
 import FacultyDashboard from '../pages/faculty/FacultyDashboard';
 import MyClassesPage from '../pages/faculty/MyClassesPage';
 import ReportsPage from '../pages/faculty/ReportsPage';
@@ -31,6 +32,8 @@ export default function AppRoutes() {
 				<Route path="/student/attendance" element={<AttendancePage />} />
 				<Route path="/student/timetable" element={<TimetablePage />} />
 				<Route path="/student/profile" element={<ProfilePage />} />
+				<Route path="/student/history" element={<HistoryPage />} />
+				<Route path="/student/history/:subjectId" element={<HistoryPage />} />
 
 				{/* Faculty Portal Routes */}
 				<Route element={<FacultyMainLayout />}>

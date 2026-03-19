@@ -2,11 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { FaThLarge, FaChartBar, FaCalendarAlt, FaUser, FaSignOutAlt, FaSun, FaMoon } from 'react-icons/fa';
 import { useTheme } from '../../contexts/ThemeProvider';
+import { useAuth } from '../../contexts/AuthProvider';
 
 // Reusable navigation items array for both Mobile Bottom Nav and Desktop Sidebar
 const navItems = [
 	{ path: '/student/dashboard', icon: FaThLarge, label: 'Dashboard' },
 	{ path: '/student/attendance', icon: FaChartBar, label: 'Attendance' },
+	{ path: '/student/history', icon: FaCalendarAlt, label: 'History' },
 	{ path: '/student/timetable', icon: FaCalendarAlt, label: 'Timetable' },
 	{ path: '/student/profile', icon: FaUser, label: 'Profile' },
 ];
@@ -89,6 +91,7 @@ const MobileBottomNav = () => {
 const Header = ({ isDarkMode, onThemeToggle, title }) => {
 	const [isProfileOpen, setIsProfileOpen] = useState(false);
 	const dropdownRef = useRef(null);
+	const { user, logout } = useAuth();
 
 	useEffect(() => {
 		const onClickOutside = (e) => {
@@ -138,11 +141,11 @@ const Header = ({ isDarkMode, onThemeToggle, title }) => {
 							aria-expanded={isProfileOpen}
 						>
 							<div className="hidden md:flex flex-col items-end mr-1 text-right">
-								<span className="text-sm font-bold text-onyx-900 dark:text-platinum-50 leading-none">Rohan Kumar</span>
-								<span className="text-xs font-medium text-onyx-500 dark:text-onyx-400 mt-1">Student</span>
+								<span className="text-sm font-bold text-onyx-900 dark:text-platinum-50 leading-none">{user?.firstName} {user?.lastName}</span>
+								<span className="text-xs font-medium text-onyx-500 dark:text-onyx-400 mt-1">{user?.role === 'STUDENT' ? 'Student' : user?.role}</span>
 							</div>
 							<img
-								src="https://ui-avatars.com/api/?name=Rohan+Kumar&background=108389&color=fff&bold=true"
+								src={`https://ui-avatars.com/api/?name=${user?.firstName}+${user?.lastName}&background=108389&color=fff&bold=true`}
 								alt="Avatar"
 								className="h-10 w-10 sm:h-9 sm:w-9 rounded-full shadow-sm ring-2 ring-white dark:ring-onyx-800"
 							/>
@@ -151,13 +154,13 @@ const Header = ({ isDarkMode, onThemeToggle, title }) => {
 						{isProfileOpen && (
 							<div className="absolute right-0 mt-3 w-56 rounded-2xl bg-white dark:bg-onyx-800 shadow-xl ring-1 ring-onyx-950/5 dark:ring-white/10 overflow-hidden z-50 transform origin-top-right transition-all">
 								<div className="px-4 py-3 md:hidden border-b border-platinum-100 dark:border-onyx-700">
-									<p className="text-sm font-bold text-onyx-900 dark:text-platinum-50">Rohan Kumar</p>
-									<p className="text-xs font-medium text-onyx-500 dark:text-onyx-400 mt-0.5">Student</p>
+									<p className="text-sm font-bold text-onyx-900 dark:text-platinum-50">{user?.firstName} {user?.lastName}</p>
+									<p className="text-xs font-medium text-onyx-500 dark:text-onyx-400 mt-0.5">{user?.role === 'STUDENT' ? 'Student' : user?.role}</p>
 								</div>
 								<Link to="/student/profile" className="flex items-center px-4 py-3 text-sm font-semibold text-onyx-700 dark:text-platinum-100 hover:bg-platinum-50 dark:hover:bg-onyx-700 transition-colors">
 									View Profile
 								</Link>
-								<button className="w-full flex items-center px-4 py-3 text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors border-t border-platinum-100 dark:border-onyx-700">
+								<button onClick={logout} className="w-full flex items-center px-4 py-3 text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors border-t border-platinum-100 dark:border-onyx-700">
 									Logout
 								</button>
 							</div>
@@ -178,6 +181,7 @@ const MainLayout = ({ children }) => {
 	const titleMap = {
 		'/student/dashboard': 'Dashboard',
 		'/student/attendance': 'My Attendance',
+		'/student/history': 'My History',
 		'/student/timetable': 'My Timetable',
 		'/student/profile': 'My Profile',
 	};

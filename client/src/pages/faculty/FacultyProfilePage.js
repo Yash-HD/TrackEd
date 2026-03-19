@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { FaBuilding, FaBirthdayCake, FaUser, FaLock, FaIdBadge, FaCheckCircle, FaExclamationTriangle } from 'react-icons/fa';
+import { useAuth } from '../../contexts/AuthProvider';
 
 // Shared styled input component
 const GlassInput = ({ label, icon: Icon, type = "text", disabled = false, ...props }) => (
@@ -21,32 +22,14 @@ const GlassInput = ({ label, icon: Icon, type = "text", disabled = false, ...pro
 );
 
 export default function FacultyProfilePage() {
-    const [userData, setUserData] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
-
-    useEffect(() => {
-        // Simulate fetch
-        setTimeout(() => {
-            const mockData = {
-                first_name: "Anjali",
-                middle_name: "",
-                last_name: "Sharma",
-                employee_id: "FACULTY01",
-                date_of_birth: "1985-08-22",
-                gender: "female",
-                department: "Computer Engineering"
-            };
-            setUserData(mockData);
-            setIsLoading(false);
-        }, 800);
-    }, []);
+    const { user } = useAuth();
 
     const handlePasswordChange = (e) => {
         e.preventDefault();
         alert("Password update logic to be connected!");
     };
 
-    if (isLoading || !userData) {
+    if (!user) {
         return (
             <div className="flex h-[70vh] items-center justify-center">
                 <div className="flex flex-col items-center gap-4 text-onyx-400 dark:text-onyx-500 font-bold uppercase tracking-widest text-sm animate-pulse">
@@ -57,9 +40,16 @@ export default function FacultyProfilePage() {
         );
     }
 
-    const fullName = `Dr. ${userData.first_name} ${userData.last_name}`;
+    const userData = {
+        first_name: user.firstName || '',
+        last_name: user.lastName || '',
+        employee_id: user.identifier || user.id?.slice(0, 12) || 'N/A',
+        department: user.departmentName || 'Department',
+        email: user.email || 'N/A',
+    };
+
+    const fullName = `${userData.first_name} ${userData.last_name}`;
     const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=1bdae4&color=fff&size=256&bold=true`;
-    const formattedDob = new Date(userData.date_of_birth).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
     return (
         <div className="relative pb-10">
@@ -130,8 +120,8 @@ export default function FacultyProfilePage() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                             <GlassInput label="First Name" value={userData.first_name} disabled />
                             <GlassInput label="Last Name" value={userData.last_name} disabled />
-                            <GlassInput label="Date of Birth" icon={FaBirthdayCake} value={formattedDob} disabled />
-                            <GlassInput label="Biological Sex" value={userData.gender.charAt(0).toUpperCase() + userData.gender.slice(1)} disabled />
+                            <GlassInput label="Email" value={userData.email} disabled />
+                            <GlassInput label="Department" icon={FaBuilding} value={userData.department} disabled />
                         </div>
                     </motion.div>
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { FaCheckCircle, FaTimesCircle } from 'react-icons/fa';
-// import axios from 'axios';
+import { scanAttendance } from '../../api/studentService';
 
 export default function QRCodeScannerModal({ isOpen, onClose }) {
   const [scanState, setScanState] = useState('scanning'); // 'scanning', 'processing', 'success', 'error'
@@ -13,26 +13,25 @@ export default function QRCodeScannerModal({ isOpen, onClose }) {
       const position = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject);
       });
-      // const location = {
-      //   latitude: position.coords.latitude,
-      //   longitude: position.coords.longitude,
-      // };
-
-      // --- SIMULATION ---
-      // This simulates a backend call with a 1.5-second delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // NEW: Controllable success/error logic
-      if (qrToken.toLowerCase() === 'error') {
-        // If the QR code contains the word "error", force an error
-        const mockErrorResponse = { message: 'Forced Error: This QR Code is invalid.' };
-        throw new Error(mockErrorResponse.message);
-      } else {
-        // For any other QR code, show success
-        const mockSuccessResponse = { message: 'Attendance Marked for Data Structures!' };
-        setFeedbackMessage(mockSuccessResponse.message);
-        setScanState('success');
+      // Retrieve location if enabled, but don't fail if timed out/denied
+      let location = null;
+      try {
+          const position = await Promise.race([
+              new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject)),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+          ]);
+          location = {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+          };
+      } catch (e) {
+          console.warn('Geolocation failed or timed out. Proceeding without location.', e);
       }
+
+      const response = await scanAttendance(qrToken, location);
+      
+      setFeedbackMessage(response.message || 'Attendance Marked!');
+      setScanState('success');
     } catch (err) {
       setFeedbackMessage(err.message || 'An unknown error occurred.');
       setScanState('error');

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FaClock, FaCalendarDay, FaUserGraduate, FaChevronRight } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getFacultyDashboard } from '../../api/facultyService';
 
 const ClassCard = ({ entry, index }) => {
     return (
@@ -40,42 +41,26 @@ const ClassCard = ({ entry, index }) => {
 export default function MyClassesPage() {
     const [timetable, setTimetable] = useState({});
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState('');
     const [activeDay, setActiveDay] = useState(new Date().toLocaleString('en-US', { weekday: 'long' }));
 
     useEffect(() => {
-        // --- DATA FETCHING & PROCESSING (Simulated) ---
-        setTimeout(() => {
-            const loggedInTeacherDataString = '{"first_name":"Anjali","middle_name":"","last_name":"Sharma","teacher_id":"1","date_of_birth":"1985-08-22","gender":"female","department":"Computer Engineering"}';
-            const timetableDataString = '{"timetable":[{"timetable_id":1,"teacher_id":"1","subject_id":7,"day_of_week":"Friday","start_time":"10:00:00","end_time":"11:00:00"},{"timetable_id":2,"teacher_id":"2","subject_id":3,"day_of_week":"Friday","start_time":"11:00:00","end_time":"12:00:00"},{"timetable_id":1,"teacher_id":"1","subject_id":8,"day_of_week":"Friday","start_time":"14:00:00","end_time":"16:00:00"},{"timetable_id":1,"teacher_id":"1","subject_id":1,"day_of_week":"Monday","start_time":"09:00:00","end_time":"10:00:00"},{"timetable_id":1,"teacher_id":"1","subject_id":4,"day_of_week":"Monday","start_time":"12:00:00","end_time":"13:00:00"},{"timetable_id":1,"teacher_id":"1","subject_id":7,"day_of_week":"Thursday","start_time":"09:00:00","end_time":"10:00:00"},{"timetable_id":1,"teacher_id":"1","subject_id":7,"day_of_week":"Tuesday","start_time":"09:00:00","end_time":"10:00:00"},{"timetable_id":1,"teacher_id":"1","subject_id":5,"day_of_week":"Tuesday","start_time":"14:00:00","end_time":"15:00:00"},{"timetable_id":1,"teacher_id":"1","subject_id":3,"day_of_week":"Wednesday","start_time":"12:00:00","end_time":"13:00:00"}]}';
-            const subjectsDataString = '{"subjects":[{"subject_id":1,"subject_name":"Linear Algebra"},{"subject_id":2,"subject_name":"PDS"},{"subject_id":3,"subject_name":"Computer Architecture"},{"subject_id":4,"subject_name":"Database Systems"},{"subject_id":5,"subject_name":"Management Science"},{"subject_id":6,"subject_name":"DS"},{"subject_id":7,"subject_name":"Data Structures"},{"subject_id":8,"subject_name":"Database Lab"},{"subject_id":9,"subject_name":"DS-Lab"},{"subject_id":10,"subject_name":"COA-Lab"},{"subject_id":11,"subject_name":"PDS-Lab"}]}';
-            const divisionsMock = { 1: 'A', 2: 'B', 3: 'C' };
-
-            const loggedInTeacher = JSON.parse(loggedInTeacherDataString);
-            const currentTeacherId = loggedInTeacher.teacher_id;
-            const rawTimetable = JSON.parse(timetableDataString).timetable;
-            const subjects = JSON.parse(subjectsDataString).subjects;
-
-            const filteredTimetable = rawTimetable.filter(entry => entry.teacher_id === currentTeacherId);
-            const subjectMap = subjects.reduce((acc, subj) => ({ ...acc, [subj.subject_id]: subj.subject_name }), {});
-            
-            const processedTimetable = filteredTimetable.reduce((acc, entry) => {
-                const day = entry.day_of_week;
-                if (!acc[day]) acc[day] = [];
-                acc[day].push({ ...entry, subject_name: subjectMap[entry.subject_id] || 'N/A', division: divisionsMock[entry.timetable_id] || 'N/A' });
-                return acc;
-            }, {});
-
-            for (const day in processedTimetable) {
-                processedTimetable[day].sort((a, b) => a.start_time.localeCompare(b.start_time));
+        const fetchClasses = async () => {
+            try {
+                // getFacultyDashboard returns timetable data for the faculty
+                const data = await getFacultyDashboard();
+                const tt = data.timetable || {};
+                // Ensure all days exist
+                const week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+                week.forEach(d => { if(!tt[d]) tt[d] = []; });
+                setTimetable(tt);
+            } catch (err) {
+                setError(err.message || 'Failed to load classes');
+            } finally {
+                setIsLoading(false);
             }
-
-            // Ensure all days exist
-            const week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-            week.forEach(d => { if(!processedTimetable[d]) processedTimetable[d] = []; });
-
-            setTimetable(processedTimetable);
-            setIsLoading(false);
-        }, 500);
+        };
+        fetchClasses();
     }, []);
 
     const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
@@ -89,6 +74,10 @@ export default function MyClassesPage() {
                 </div>
             </div>
         );
+    }
+
+    if (error) {
+        return <div className="flex items-center justify-center p-20 text-red-500 font-bold">{error}</div>;
     }
 
     return (

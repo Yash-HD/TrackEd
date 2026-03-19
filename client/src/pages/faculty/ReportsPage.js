@@ -5,31 +5,7 @@ import {
     Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend 
 } from 'recharts';
 import { FaChartPie, FaArrowUp, FaArrowDown, FaUsers, FaExclamationTriangle, FaCheckCircle } from 'react-icons/fa';
-
-// MOCK DATA GENERATION (Using standard distributions)
-const attendanceTrends = [
-    { week: 'Week 1', attendance: 85, target: 75 },
-    { week: 'Week 2', attendance: 88, target: 75 },
-    { week: 'Week 3', attendance: 82, target: 75 },
-    { week: 'Week 4', attendance: 89, target: 75 },
-    { week: 'Week 5', attendance: 91, target: 75 },
-    { week: 'Week 6', attendance: 86, target: 75 },
-    { week: 'Week 7', attendance: 94, target: 75 },
-];
-
-const subjectPerformance = [
-    { name: 'Data Structures', passRate: 92, avgScore: 81 },
-    { name: 'Linear Algebra', passRate: 78, avgScore: 65 },
-    { name: 'Computer Arch', passRate: 85, avgScore: 72 },
-    { name: 'Database Systems', passRate: 88, avgScore: 79 },
-    { name: 'Mgmt Science', passRate: 98, avgScore: 88 },
-];
-
-const studentRiskDistribution = [
-    { name: 'Safe (>75%)', value: 185, color: '#10b981' }, // Green
-    { name: 'Warning (65-75%)', value: 34, color: '#f59e0b' }, // Amber
-    { name: 'Critical (<65%)', value: 12, color: '#ef4444' }, // Red
-];
+import { getFacultyAnalytics } from '../../api/facultyService';
 
 // Reusable animated KPI Card
 const KPICard = ({ title, value, trend, trendLabel, icon: Icon, colorClass, delay }) => (
@@ -61,11 +37,21 @@ const KPICard = ({ title, value, trend, trendLabel, icon: Icon, colorClass, dela
 
 export default function ReportsPage() {
     const [isLoading, setIsLoading] = useState(true);
+    const [analyticsData, setAnalyticsData] = useState(null);
+    const [error, setError] = useState('');
 
     useEffect(() => {
-        // Simulate chart rendering delay
-        const timer = setTimeout(() => setIsLoading(false), 800);
-        return () => clearTimeout(timer);
+        const fetchAnalytics = async () => {
+            try {
+                const data = await getFacultyAnalytics();
+                setAnalyticsData(data);
+            } catch (err) {
+                setError(err.message || 'Failed to load analytics');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchAnalytics();
     }, []);
 
     if (isLoading) {
@@ -78,6 +64,15 @@ export default function ReportsPage() {
             </div>
         );
     }
+
+    if (error) {
+        return <div className="flex items-center justify-center p-20 text-red-500 font-bold">{error}</div>;
+    }
+
+    if (!analyticsData) return null;
+
+    const { attendanceTrends = [], riskDistribution: studentRiskDistribution = [], subjectPerformance = [], kpis = {} } = analyticsData;
+    const totalAtRisk = kpis.atRiskPopulation ?? 0;
 
     return (
         <div className="relative">
@@ -105,42 +100,33 @@ export default function ReportsPage() {
                 </motion.div>
 
                 {/* KPI Cards Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <KPICard 
                         title="Cohort Avg Attendance" 
-                        value="87.4%" 
-                        trend={4.2} 
-                        trendLabel="vs last month"
+                        value={kpis.cohortAvgAttendance || '0%'} 
+                        trend={0} 
+                        trendLabel="Current term"
                         icon={FaUsers}
                         colorClass="bg-dark-teal-500 text-dark-teal-500"
                         delay={0.1}
                     />
                     <KPICard 
                         title="At-Risk Population" 
-                        value="12" 
-                        trend={-2} 
-                        trendLabel="Total students < 65%"
+                        value={String(totalAtRisk)} 
+                        trend={0} 
+                        trendLabel="Total students < 75%"
                         icon={FaExclamationTriangle}
                         colorClass="bg-amber-500 text-amber-500"
                         delay={0.2}
                     />
                     <KPICard 
-                        title="Mean Assessment Score" 
-                        value="77.2" 
-                        trend={1.5} 
-                        trendLabel="Across 5 active modules"
-                        icon={FaCheckCircle}
-                        colorClass="bg-emerald-500 text-emerald-500"
-                        delay={0.3}
-                    />
-                    <KPICard 
                         title="Classes Executed" 
-                        value="142" 
+                        value={String(kpis.classesExecuted || 0)} 
                         trend={0} 
                         trendLabel="Total sessions this term"
                         icon={FaChartPie}
                         colorClass="bg-indigo-500 text-indigo-500"
-                        delay={0.4}
+                        delay={0.3}
                     />
                 </div>
 
@@ -193,7 +179,7 @@ export default function ReportsPage() {
                     >
                         <div className="mb-2 text-center">
                             <h3 className="text-xl font-extrabold tracking-tight text-onyx-900 dark:text-platinum-50">Risk Distribution</h3>
-                            <p className="text-xs font-bold text-onyx-500 uppercase tracking-widest">Global Cohort (n=231)</p>
+                            <p className="text-xs font-bold text-onyx-500 uppercase tracking-widest">Global Cohort (n={studentRiskDistribution.reduce((sum, d) => sum + d.value, 0)})</p>
                         </div>
                         <div className="h-56 w-full flex-grow relative">
                             <ResponsiveContainer width="100%" height="100%">
@@ -220,7 +206,7 @@ export default function ReportsPage() {
                             </ResponsiveContainer>
                             {/* Center Statistic */}
                             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-2">
-                                <span className="text-3xl font-black text-amber-500">46</span>
+                                <span className="text-3xl font-black text-amber-500">{totalAtRisk}</span>
                                 <span className="text-[10px] font-bold uppercase tracking-widest text-onyx-500">At Risk</span>
                             </div>
                         </div>

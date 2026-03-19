@@ -1,48 +1,42 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import MainLayout from '../../components/student/MainLayout';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getStudentAttendance } from '../../api/studentService';
 
-// Mock Data - In a real app, this would come from an API call
-const SAMPLE_RECORDS = [
-    { datetime: '2025-09-08T11:00:00', subject: 'Data Structures', status: 'Present' },
-    { datetime: '2025-09-08T14:00:00', subject: 'Database Management', status: 'Present' },
-    { datetime: '2025-09-09T09:00:00', subject: 'Operating Systems', status: 'Absent' },
-    { datetime: '2025-09-10T12:00:00', subject: 'Data Structures', status: 'Present' },
-    { datetime: '2025-08-11T11:00:00', subject: 'Operating Systems', status: 'Present' },
-    { datetime: '2025-08-12T10:00:00', subject: 'Computer Networks', status: 'Present' },
-];
-const SAMPLE_SUBJECTS = ['All Subjects', 'Data Structures', 'Operating Systems', 'Database Management', 'Computer Networks'];
 const MONTHS = ['All Months', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 const AttendancePage = () => {
     const [subjectFilter, setSubjectFilter] = useState('All Subjects');
     const [monthFilter, setMonthFilter] = useState(new Date().getMonth() + 1);
+    const [subjectStats, setSubjectStats] = useState([]);
+    const [subjects, setSubjects] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const navigate = useNavigate();
 
-    const subjectStats = useMemo(() => {
-        const recordsInMonth = monthFilter === 'All Months' 
-            ? SAMPLE_RECORDS 
-            : SAMPLE_RECORDS.filter(rec => new Date(rec.datetime).getMonth() + 1 === parseInt(monthFilter));
-        
-        const groupedBySubject = recordsInMonth.reduce((acc, rec) => {
-            if (!acc[rec.subject]) acc[rec.subject] = [];
-            acc[rec.subject].push(rec);
-            return acc;
-        }, {});
+    useEffect(() => {
+        const fetchAttendance = async () => {
+            try {
+                const month = monthFilter === 'All Months' ? undefined : parseInt(monthFilter);
+                const subjectId = subjectFilter !== 'All Subjects' ? subjectFilter : undefined;
+                const data = await getStudentAttendance(month, subjectId);
+                // data = { records, subjects, subjectStats }
+                setSubjects(['All Subjects', ...(data.subjects || [])]);
+                setSubjectStats(data.subjectStats || []);
+            } catch (err) {
+                setError(err.message || 'Failed to load attendance');
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchAttendance();
+    }, [monthFilter, subjectFilter]);
 
-        let stats = Object.keys(groupedBySubject).map(subjectName => {
-            const records = groupedBySubject[subjectName];
-            const totalLec = records.length;
-            const attendedLec = records.filter(r => r.status === 'Present').length;
-            const percentage = totalLec > 0 ? Math.round((attendedLec / totalLec) * 100) : 0;
-            return { subjectName, totalLec, attendedLec, percentage };
-        });
-        
-        if (subjectFilter !== 'All Subjects') {
-            stats = stats.filter(s => s.subjectName === subjectFilter);
-        }
-
-        return stats;
-    }, [subjectFilter, monthFilter]);
+    const filteredStats = useMemo(() => {
+        if (subjectFilter === 'All Subjects') return subjectStats;
+        return subjectStats.filter(s => s.subjectName === subjectFilter);
+    }, [subjectFilter, subjectStats]);
 
     const getPercentColor = (pct) => {
         if (pct >= 85) return 'text-green-500 dark:text-green-400';
@@ -60,6 +54,13 @@ const AttendancePage = () => {
         show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 200, damping: 20 } },
         exit: { opacity: 0, scale: 0.9, transition: { duration: 0.2 } }
     };
+
+    if (loading) {
+        return <MainLayout><div className="flex items-center justify-center p-20 text-onyx-500 font-bold animate-pulse">Loading Attendance...</div></MainLayout>;
+    }
+    if (error) {
+        return <MainLayout><div className="flex items-center justify-center p-20 text-red-500 font-bold">{error}</div></MainLayout>;
+    }
 
     return (
         <MainLayout>
@@ -92,7 +93,7 @@ const AttendancePage = () => {
                                 onChange={(e) => setSubjectFilter(e.target.value)} 
                                 className="px-4 py-3 rounded-xl border border-platinum-200 dark:border-onyx-700 bg-white/80 dark:bg-onyx-900/80 backdrop-blur-md font-semibold text-onyx-800 dark:text-platinum-100 focus:outline-none focus:ring-2 focus:ring-dark-teal-500 shadow-sm transition-all cursor-pointer appearance-none"
                             >
-                                {SAMPLE_SUBJECTS.map((s) => <option key={s} value={s} className="bg-white dark:bg-onyx-900">{s}</option>)}
+                                {subjects.map((s) => <option key={s} value={s} className="bg-white dark:bg-onyx-900">{s}</option>)}
                             </select>
                             <select 
                                 value={monthFilter} 
@@ -105,16 +106,17 @@ const AttendancePage = () => {
                     </motion.div>
 
                     {/* Responsive Tile Grid */}
-                    {subjectStats.length > 0 ? (
+                    {filteredStats.length > 0 ? (
                         <motion.div layout className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             <AnimatePresence>
-                                {subjectStats.map((stat, idx) => (
+                                {filteredStats.map((stat, idx) => (
                                     <motion.div 
                                         layout
                                         variants={itemVariants}
                                         key={stat.subjectName} 
-                                        whileHover={{ y: -6, boxShadow: "0 20px 40px -10px rgba(0,0,0,0.1)" }}
-                                        className="group bg-white/60 dark:bg-onyx-800/40 backdrop-blur-xl border border-platinum-100 dark:border-onyx-700/50 rounded-3xl shadow-sm dark:shadow-[0_8px_24px_rgba(0,0,0,0.2)] p-6 md:p-8 flex flex-col justify-between transition-all duration-300 relative overflow-hidden"
+                                        onClick={() => navigate(`/student/history/${stat.subjectId}`)}
+                                        whileHover={{ y: -6, boxShadow: "0 20px 40px -10px rgba(0,0,0,0.1)", scale: 1.02 }}
+                                        className="group cursor-pointer bg-white/60 dark:bg-onyx-800/40 backdrop-blur-xl border border-platinum-100 dark:border-onyx-700/50 rounded-3xl shadow-sm dark:shadow-[0_8px_24px_rgba(0,0,0,0.2)] p-6 md:p-8 flex flex-col justify-between transition-all duration-300 relative overflow-hidden"
                                     >
                                         <div className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-dark-teal-400 to-dark-teal-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                         

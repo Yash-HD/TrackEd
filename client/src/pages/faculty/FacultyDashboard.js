@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { FaClock, FaExclamationTriangle, FaEnvelopeOpenText, FaArrowRight, FaVideo, FaCheckCircle, FaUserShield } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getFacultyDashboard } from '../../api/facultyService';
 
 // Complex Glassmorphism constraints implemented on the dashboard cards
 const DashboardCard = ({ children, className }) => (
-    <motion.div 
+    <motion.div
         whileHover={{ y: -5, boxShadow: "0 20px 40px -10px rgba(0,0,0,0.1)" }}
         className={`bg-white/60 dark:bg-onyx-800/40 backdrop-blur-2xl border border-platinum-100 dark:border-onyx-700/50 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.05)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden relative group transition-all duration-300 ${className}`}
     >
@@ -57,29 +58,18 @@ const AnimatedCircularProgress = ({ percentage, colorClass, trailColorClass, lab
 export default function FacultyDashboard() {
     const [dashboardData, setDashboardData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState('');
 
     useEffect(() => {
         const fetchDashboardData = async () => {
-            setTimeout(() => {
-                const mockData = {
-                    todaysClasses: [
-                        { classId: "CS301", subjectName: "Data Structures", time: "10:00 AM - 11:00 AM", semester: "3rd Sem, CSE", type: "Core Lecture" },
-                        { classId: "EC305", subjectName: "Digital Electronics", time: "01:00 PM - 02:00 PM", semester: "3rd Sem, ECE", type: "Lab Session" },
-                        { classId: "CS309", subjectName: "Advanced DBMS", time: "03:00 PM - 04:30 PM", semester: "5th Sem, CSE", type: "Seminar" }
-                    ],
-                    liveSession: { classId: "CS301", subjectName: "Data Structures", presentCount: 45, totalStudents: 60, status: 'Active' },
-                    atRiskStudents: [
-                        { name: "Priya Singh", attendance: "68%", roll: "2024CS104" }, 
-                        { name: "Amit Kumar", attendance: "71%", roll: "2024EC055" },
-                    ],
-                    pendingLeaves: [
-                        { studentName: "Rohan Kumar", forDates: "Sep 15 - Sep 16", reason: "Medical" }, 
-                        { studentName: "Anjali Gupta", forDates: "Sep 15", reason: "Family Emergency" },
-                    ],
-                };
-                setDashboardData(mockData);
+            try {
+                const data = await getFacultyDashboard();
+                setDashboardData(data);
+            } catch (err) {
+                setError(err.message || 'Failed to load dashboard');
+            } finally {
                 setIsLoading(false);
-            }, 800);
+            }
         };
         fetchDashboardData();
     }, []);
@@ -105,7 +95,13 @@ export default function FacultyDashboard() {
         );
     }
 
+    if (error) {
+        return <div className="flex items-center justify-center p-20 text-red-500 font-bold">{error}</div>;
+    }
+
     if (!dashboardData) return null;
+
+    const facultyName = dashboardData.faculty ? `${dashboardData.faculty.firstName} ${dashboardData.faculty.lastName}` : 'Faculty';
 
     return (
         <div className="relative">
@@ -117,44 +113,44 @@ export default function FacultyDashboard() {
             </div>
 
             <motion.div variants={containerVariants} initial="hidden" animate="show" className="flex flex-col gap-8 relative z-10 w-full text-onyx-900 dark:text-platinum-50">
-                
+
                 {/* Welcome Summary Banner */}
                 <motion.div variants={itemVariants} className="bg-white/60 dark:bg-onyx-800/40 backdrop-blur-2xl rounded-[2rem] border border-platinum-100 dark:border-onyx-700/50 shadow-[0_8px_32px_rgba(0,0,0,0.05)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4)] p-8 md:p-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-dark-teal-300/30 to-transparent dark:from-dark-teal-600/20 rounded-full filter blur-3xl opacity-50 pointer-events-none -translate-y-1/2 translate-x-1/2"></div>
-                    
+
                     <div>
                         <div className="inline-flex items-center gap-2 px-3 py-1 pb-1.5 rounded-full bg-platinum-200/50 dark:bg-onyx-900/80 border border-platinum-300 dark:border-onyx-700 text-xs font-black uppercase tracking-[0.2em] text-onyx-600 dark:text-onyx-400 mb-4">
                             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> SYSTEM ONLINE
                         </div>
                         <h2 className="text-4xl md:text-5xl font-black tracking-tight text-onyx-900 dark:text-platinum-50 mb-2 leading-tight">
-                            Good Afternoon, <br className="md:hidden" /><span className="bg-clip-text text-transparent bg-gradient-to-r from-dark-teal-600 to-stormy-teal-700 dark:from-dark-teal-400 dark:to-platinum-300">Dr. Sharma.</span>
+                            Good Afternoon, <br className="md:hidden" /><span className="bg-clip-text text-transparent bg-gradient-to-r from-dark-teal-600 to-stormy-teal-700 dark:from-dark-teal-400 dark:to-platinum-300">{facultyName}.</span>
                         </h2>
                         <p className="text-onyx-600 dark:text-onyx-400 font-bold text-lg">You have {dashboardData.todaysClasses.length} sessions scheduled today.</p>
                     </div>
 
                     <div className="hidden lg:flex items-center gap-6">
-                        <AnimatedCircularProgress 
-                            percentage={85} 
-                            label="Avg Attendance" 
-                            colorClass="text-dark-teal-500" 
-                            trailColorClass="text-platinum-200 dark:text-onyx-700" 
+                        <AnimatedCircularProgress
+                            percentage={85}
+                            label="Avg Attendance"
+                            colorClass="text-dark-teal-500"
+                            trailColorClass="text-platinum-200 dark:text-onyx-700"
                         />
                         <div className="w-px h-16 bg-platinum-300 dark:bg-onyx-700"></div>
-                        <AnimatedCircularProgress 
-                            percentage={12} 
-                            label="At Risk" 
-                            colorClass="text-amber-500" 
-                            trailColorClass="text-platinum-200 dark:text-onyx-700" 
+                        <AnimatedCircularProgress
+                            percentage={12}
+                            label="At Risk"
+                            colorClass="text-amber-500"
+                            trailColorClass="text-platinum-200 dark:text-onyx-700"
                         />
                     </div>
                 </motion.div>
 
                 {/* Primary Dashboard Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    
+
                     {/* Left Column: Today's Schedule */}
                     <motion.div variants={itemVariants} className="lg:col-span-2 flex flex-col gap-8">
-                        
+
                         <DashboardCard className="flex flex-col h-full">
                             <div className="p-6 md:p-8 border-b border-platinum-100 dark:border-onyx-700/50 flex items-center justify-between">
                                 <h3 className="text-xl font-extrabold flex items-center gap-3 text-onyx-900 dark:text-platinum-50 tracking-tight">
@@ -165,32 +161,32 @@ export default function FacultyDashboard() {
                                 </h3>
                                 <button className="text-sm font-bold text-dark-teal-600 dark:text-dark-teal-400 hover:text-dark-teal-800 hover:underline transition-colors">View Timeline</button>
                             </div>
-                            
+
                             <div className="p-6 md:p-8 space-y-4 flex-grow">
                                 <AnimatePresence>
                                     {dashboardData.todaysClasses.map((cls, idx) => (
-                                        <motion.div 
+                                        <motion.div
                                             initial={{ opacity: 0, x: -20 }}
                                             animate={{ opacity: 1, x: 0 }}
                                             transition={{ delay: 0.1 * idx }}
-                                            key={cls.classId} 
+                                            key={cls.classId}
                                             className="group relative flex flex-col sm:flex-row sm:items-center justify-between p-5 bg-white/80 dark:bg-onyx-900/60 backdrop-blur-md border border-platinum-100 dark:border-onyx-700/60 rounded-2xl shadow-sm hover:shadow-md transition-all gap-4 overflow-hidden"
                                         >
                                             {/* Hover indicator */}
                                             <div className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-dark-teal-400 to-stormy-teal-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                            
+
                                             <div className="pl-2">
                                                 <div className="flex items-center gap-3 mb-1">
                                                     <h4 className="font-extrabold text-lg tracking-tight text-onyx-900 dark:text-platinum-50 group-hover:text-dark-teal-700 dark:group-hover:text-platinum-200 transition-colors">{cls.subjectName}</h4>
                                                     <span className="px-2 py-0.5 rounded border border-platinum-200 dark:border-onyx-700 bg-platinum-50 dark:bg-onyx-800 font-bold text-[10px] text-onyx-500 uppercase tracking-widest">{cls.classId}</span>
                                                 </div>
                                                 <p className="text-sm font-semibold text-onyx-500 dark:text-onyx-400 flex items-center gap-2">
-                                                    {cls.time} <span className="w-1 h-1 rounded-full bg-platinum-300 dark:bg-onyx-600"></span> {cls.semester}
+                                                    {cls.time} <span className="w-1 h-1 rounded-full bg-platinum-300 dark:bg-onyx-600"></span> {cls.semester} <span className="w-1 h-1 rounded-full bg-platinum-300 dark:bg-onyx-600"></span> {cls.division}
                                                 </p>
                                             </div>
 
-                                            <Link 
-                                                to={`/faculty/session/${cls.classId}`} 
+                                            <Link
+                                                to={`/faculty/session/${cls.scheduleId}`}
                                                 className="shrink-0 flex items-center justify-center gap-2 bg-onyx-900 dark:bg-platinum-100 text-white dark:text-onyx-900 px-6 py-3 rounded-xl font-extrabold shadow-md hover:shadow-lg transition-all active:scale-95 text-sm uppercase tracking-wide group/btn"
                                             >
                                                 Initialize
@@ -205,11 +201,11 @@ export default function FacultyDashboard() {
 
                     {/* Right Column: Actionable Alerts & Active Sessions */}
                     <motion.div variants={itemVariants} className="lg:col-span-1 flex flex-col gap-8">
-                        
+
                         {/* Live Session Override Box */}
                         {dashboardData.liveSession && (
                             <Link to={`/faculty/session/${dashboardData.liveSession.classId}`}>
-                                <motion.div 
+                                <motion.div
                                     whileHover={{ scale: 1.02, y: -4, filter: 'brightness(1.1)' }}
                                     className="bg-gradient-to-br from-dark-teal-600 to-stormy-teal-800 text-white rounded-[2rem] shadow-xl p-8 relative overflow-hidden group cursor-pointer"
                                 >
@@ -224,9 +220,9 @@ export default function FacultyDashboard() {
                                             <FaVideo className="text-white" />
                                         </div>
                                     </div>
-                                    
+
                                     <p className="font-extrabold text-xl tracking-tight mb-6 relative z-10">{dashboardData.liveSession.subjectName}</p>
-                                    
+
                                     <div className="flex items-baseline gap-2 mb-1 relative z-10">
                                         <span className="text-5xl font-black">{dashboardData.liveSession.presentCount}</span>
                                         <span className="text-xl font-bold opacity-70">/ {dashboardData.liveSession.totalStudents}</span>

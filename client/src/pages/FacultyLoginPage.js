@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FaIdBadge, FaLock, FaEye, FaEyeSlash, FaSun, FaMoon, FaChalkboardTeacher, FaArrowLeft } from 'react-icons/fa';
 import { useTheme } from '../contexts/ThemeProvider';
+import { useAuth } from '../contexts/AuthProvider';
 import { motion } from 'framer-motion';
 
 const FacultyLoginPage = () => {
@@ -12,6 +13,7 @@ const FacultyLoginPage = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [rememberMe, setRememberMe] = useState(false);
     const { theme, toggleTheme } = useTheme();
+    const { login } = useAuth();
     const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
@@ -19,14 +21,10 @@ const FacultyLoginPage = () => {
         setIsLoading(true);
         setError(null);
         try {
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-            if (facultyId === 'FACULTY01' && password === 'password123') {
-                navigate('/faculty/dashboard');
-            } else {
-                throw new Error('Invalid faculty ID or password.');
-            }
+            await login({ id: facultyId, password }, 'FACULTY');
+            navigate('/faculty/dashboard');
         } catch (err) {
-            setError(err.message || 'An unexpected error occurred.');
+            setError(err.message || 'Invalid faculty ID or password.');
         } finally {
             setIsLoading(false);
         }
@@ -99,8 +97,8 @@ const FacultyLoginPage = () => {
                 <div className="mb-8 p-3 bg-dark-teal-50 dark:bg-dark-teal-900/30 border border-dark-teal-200 dark:border-dark-teal-800/50 rounded-xl flex flex-col gap-1 items-center text-center relative z-20">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-dark-teal-700 dark:text-dark-teal-400">Demo Credentials</span>
                     <div className="flex gap-4 text-sm font-black text-onyx-800 dark:text-platinum-200">
-                        <span>ID: <code className="font-mono bg-white/60 dark:bg-black/30 px-1.5 py-0.5 rounded text-dark-teal-600 dark:text-dark-teal-400">FACULTY01</code></span>
-                        <span>PWD: <code className="font-mono bg-white/60 dark:bg-black/30 px-1.5 py-0.5 rounded text-dark-teal-600 dark:text-dark-teal-400">password123</code></span>
+                        <span>ID: <code className="font-mono bg-white/60 dark:bg-black/30 px-1.5 py-0.5 rounded text-dark-teal-600 dark:text-dark-teal-400">FAC001</code></span>
+                        <span>PWD: <code className="font-mono bg-white/60 dark:bg-black/30 px-1.5 py-0.5 rounded text-dark-teal-600 dark:text-dark-teal-400">Password123!</code></span>
                     </div>
                 </div>
 

@@ -2,38 +2,37 @@ import React, { useState, useEffect } from 'react';
 import MainLayout from '../../components/student/MainLayout';
 import { FaClock, FaCalendarDay } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getStudentTimetable } from '../../api/studentService';
 
 export default function TimetablePage() {
     const [timetable, setTimetable] = useState({});
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState('');
     const [activeDay, setActiveDay] = useState(new Date().toLocaleString('en-US', { weekday: 'long' }));
 
     useEffect(() => {
-        // --- DATA FETCHING & PROCESSING (Simulated from localStorage) ---
-        const timetableDataString = '{"timetable":[{"timetable_id":1,"teacher_id":"1","subject_id":7,"day_of_week":"Friday","start_time":"10:00:00","end_time":"11:00:00"},{"timetable_id":1,"teacher_id":"2","subject_id":3,"day_of_week":"Friday","start_time":"11:00:00","end_time":"12:00:00"},{"timetable_id":1,"teacher_id":"3","subject_id":4,"day_of_week":"Friday","start_time":"12:00:00","end_time":"13:00:00"},{"timetable_id":1,"teacher_id":"1","subject_id":8,"day_of_week":"Friday","start_time":"14:00:00","end_time":"16:00:00"},{"timetable_id":1,"teacher_id":"1","subject_id":1,"day_of_week":"Monday","start_time":"09:00:00","end_time":"10:00:00"},{"timetable_id":1,"teacher_id":"2","subject_id":2,"day_of_week":"Monday","start_time":"10:00:00","end_time":"11:00:00"},{"timetable_id":1,"teacher_id":"3","subject_id":3,"day_of_week":"Monday","start_time":"11:00:00","end_time":"12:00:00"},{"timetable_id":1,"teacher_id":"1","subject_id":4,"day_of_week":"Monday","start_time":"12:00:00","end_time":"13:00:00"},{"timetable_id":1,"teacher_id":"2","subject_id":5,"day_of_week":"Monday","start_time":"14:00:00","end_time":"15:00:00"},{"timetable_id":1,"teacher_id":"1","subject_id":7,"day_of_week":"Thursday","start_time":"09:00:00","end_time":"10:00:00"},{"timetable_id":1,"teacher_id":"2","subject_id":6,"day_of_week":"Thursday","start_time":"10:00:00","end_time":"11:00:00"},{"timetable_id":1,"teacher_id":"3","subject_id":10,"day_of_week":"Thursday","start_time":"11:00:00","end_time":"13:00:00"},{"timetable_id":1,"teacher_id":"1","subject_id":7,"day_of_week":"Tuesday","start_time":"09:00:00","end_time":"10:00:00"},{"timetable_id":1,"teacher_id":"2","subject_id":6,"day_of_week":"Tuesday","start_time":"10:00:00","end_time":"11:00:00"},{"timetable_id":1,"teacher_id":"3","subject_id":11,"day_of_week":"Tuesday","start_time":"11:00:00","end_time":"13:00:00"},{"timetable_id":1,"teacher_id":"1","subject_id":5,"day_of_week":"Tuesday","start_time":"14:00:00","end_time":"15:00:00"},{"timetable_id":1,"teacher_id":"2","subject_id":9,"day_of_week":"Wednesday","start_time":"09:00:00","end_time":"11:00:00"},{"timetable_id":1,"teacher_id":"3","subject_id":4,"day_of_week":"Wednesday","start_time":"11:00:00","end_time":"12:00:00"},{"timetable_id":1,"teacher_id":"1","subject_id":3,"day_of_week":"Wednesday","start_time":"12:00:00","end_time":"13:00:00"},{"timetable_id":1,"teacher_id":"2","subject_id":6,"day_of_week":"Wednesday","start_time":"14:00:00","end_time":"15:00:00"},{"timetable_id":1,"teacher_id":"3","subject_id":5,"day_of_week":"Wednesday","start_time":"15:00:00","end_time":"16:00:00"}]}';
-        const subjectsDataString = '{"subjects":[{"subject_id":1,"subject_name":"LLC"},{"subject_id":2,"subject_name":"PDS"},{"subject_id":3,"subject_name":"COA"},{"subject_id":4,"subject_name":"DBMS"},{"subject_id":5,"subject_name":"MS"},{"subject_id":6,"subject_name":"DS"},{"subject_id":7,"subject_name":"DSGT"},{"subject_id":8,"subject_name":"DBMS-Lab"},{"subject_id":9,"subject_name":"DS-Lab"},{"subject_id":10,"subject_name":"COA-Lab"},{"subject_id":11,"subject_name":"PDS-Lab"}]}';
-        const teachersDataString = '{"teachers":[{"teacher_id":"1","teacher_name":"Dr. A. Sharma"},{"teacher_id":"2","teacher_name":"Prof. R. Verma"},{"teacher_id":"3","teacher_name":"Dr. S. Gupta"}]}';
-        
-        const rawTimetable = JSON.parse(timetableDataString).timetable;
-        const subjects = JSON.parse(subjectsDataString).subjects;
-        const teachers = JSON.parse(teachersDataString).teachers;
-        const subjectMap = subjects.reduce((acc, subj) => ({ ...acc, [subj.subject_id]: subj.subject_name }), {});
-        const teacherMap = teachers.reduce((acc, t) => ({ ...acc, [t.teacher_id]: t.teacher_name }), {});
-        const processedTimetable = rawTimetable.reduce((acc, entry) => {
-            const day = entry.day_of_week;
-            if (!acc[day]) acc[day] = [];
-            acc[day].push({ ...entry, subject_name: subjectMap[entry.subject_id] || 'N/A', teacher_name: teacherMap[entry.teacher_id] || 'N/A' });
-            return acc;
-        }, {});
-        for (const day in processedTimetable) {
-            processedTimetable[day].sort((a, b) => a.start_time.localeCompare(b.start_time));
-        }
-        setTimetable(processedTimetable);
-        setIsLoading(false);
+        const fetchTimetable = async () => {
+            try {
+                // Backend returns { Monday: [...], Tuesday: [...], ... }
+                // Each entry has: subject_name, subject_code, teacher_name, start_time, end_time, type
+                const data = await getStudentTimetable();
+                setTimetable(data);
+            } catch (err) {
+                setError(err.message || 'Failed to load timetable');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchTimetable();
     }, []);
 
     const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-    const formatTime = (time) => new Date(`1970-01-01T${time}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
+    const formatTime = (time) => {
+        if (!time) return '';
+        // Handle both ISO date strings and HH:MM:SS time strings
+        const d = typeof time === 'string' && time.includes('T') ? new Date(time) : new Date(`1970-01-01T${time}`);
+        return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
+    };
 
     const containerVariants = {
         hidden: { opacity: 0 },
@@ -49,6 +48,14 @@ export default function TimetablePage() {
         return (
             <MainLayout>
                 <div className="flex items-center justify-center p-20 text-onyx-500 font-bold animate-pulse">Loading Timetable...</div>
+            </MainLayout>
+        );
+    }
+
+    if (error) {
+        return (
+            <MainLayout>
+                <div className="flex items-center justify-center p-20 text-red-500 font-bold">{error}</div>
             </MainLayout>
         );
     }
