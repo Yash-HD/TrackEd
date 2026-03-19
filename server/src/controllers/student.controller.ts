@@ -1,7 +1,7 @@
 // src/controllers/student.controller.ts
 
 import type { Request, Response, NextFunction } from 'express';
-import { getDashboard, getTimetable, getAttendance, scanQR } from '../services/student.service.js';
+import { getDashboard, getTimetable, getAttendance, scanQR, getAttendanceHistory } from '../services/student.service.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 
@@ -68,6 +68,24 @@ export const scanAttendance = async (req: Request, res: Response, next: NextFunc
 
         const data = await scanQR(req.user.userId, qrToken, location);
         res.status(200).json(new ApiResponse(200, data, data.message));
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * GET /api/student/attendance/history?subjectId=abc&limit=30
+ * Returns flat list of latest attendance records
+ */
+export const attendanceHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        if (!req.user) throw new ApiError(401, 'Authentication required.');
+
+        const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+        const subjectId = req.query.subjectId as string | undefined;
+
+        const data = await getAttendanceHistory(req.user.userId, limit, subjectId);
+        res.status(200).json(new ApiResponse(200, data, 'Attendance history loaded'));
     } catch (error) {
         next(error);
     }

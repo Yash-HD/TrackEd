@@ -4,7 +4,7 @@ import type { Request, Response, NextFunction } from 'express';
 import {
     getDashboard, getAnalytics,
     getPendingLeaves, reviewLeave, applyLeave, getLeaveHistory,
-    startSession, endSession, manualAttendance
+    startSession, endSession, manualAttendance, refreshQRToken
 } from '../services/faculty.service.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -99,5 +99,14 @@ export const manualAttendanceHandler = async (req: Request, res: Response, next:
         }
         const data = await manualAttendance(req.user.userId, req.params.sessionId as string, studentId, status);
         res.status(200).json(new ApiResponse(200, data, `Student marked ${status.toLowerCase()}`));
+    } catch (error) { next(error); }
+};
+
+// POST /api/faculty/session/:sessionId/qr/refresh
+export const refreshQRTokenHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        if (!req.user) throw new ApiError(401, 'Authentication required.');
+        const qrToken = refreshQRToken(req.params.sessionId as string);
+        res.status(200).json(new ApiResponse(200, { qrToken }, 'QR Token refreshed'));
     } catch (error) { next(error); }
 };

@@ -1,5 +1,7 @@
 node_modules
 # Keep environment variables out of version control
 .env
-
+seed.js
+seed.ts
 /generated/prisma
+/dist

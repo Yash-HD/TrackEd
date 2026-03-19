@@ -27,30 +27,36 @@ export const getDashboard = async (userId: string) => {
     if (!faculty) throw new ApiError(404, 'Faculty not found');
 
     const today = getDayOfWeek();
+    const now = new Date();
+    const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    // --- TODAY'S CLASSES ---
     const todaysSchedules = await prisma.timetableSchedule.findMany({
         where: { facultyId: userId, dayOfWeek: today as any },
         include: {
             subject: { select: { name: true, code: true } },
             department: { select: { name: true } },
+            sessions: {
+                where: { date: todayDate, status: 'COMPLETED' },
+                select: { id: true }
+            }
         },
         orderBy: { startTime: 'asc' }
     });
 
-    const todaysClasses = todaysSchedules.map(s => ({
+    // Filter out completed sessions
+    const activeTodaysSchedules = todaysSchedules.filter(s => s.sessions.length === 0);
+
+    const todaysClasses = activeTodaysSchedules.map(s => ({
         scheduleId: s.id,
         classId: s.subject.code,
         subjectName: s.subject.name,
         time: `${s.startTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })} - ${s.endTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })}`,
         semester: `Sem ${s.semester}, ${s.department.name}`,
         type: s.type,
+        division: s.division,
     }));
 
     // --- ACTIVE LIVE SESSION ---
-    const now = new Date();
-    const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
     const activeSession = await prisma.classSession.findFirst({
         where: {
             schedule: { facultyId: userId },
@@ -75,7 +81,7 @@ export const getDashboard = async (userId: string) => {
                 role: 'STUDENT',
                 departmentId: activeSession.schedule.departmentId,
                 semester: activeSession.schedule.semester,
-                division: activeSession.schedule.division,
+                ...(activeSession.schedule.division ? { division: activeSession.schedule.division } : {}),
             }
         });
 
@@ -130,16 +136,19 @@ export const getDashboard = async (userId: string) => {
         })
         : [];
 
-    const atRiskStudents = atRiskUsers.map(u => {
+    const atRiskStudentsRaw = atRiskUsers.map(u => {
         const total = studentsInSubjects.find(s => s.studentId === u.id)?._count.id ?? 0;
         const present = presentMap.get(u.id) ?? 0;
         const pct = total > 0 ? Math.round((present / total) * 100) : 0;
         return {
             name: `${u.firstName} ${u.lastName}`,
+            pct,
             attendance: `${pct}%`,
             roll: u.identifier,
         };
     });
+
+    const atRiskStudents = atRiskStudentsRaw.sort((a, b) => a.pct - b.pct).slice(0, 5);
 
     // --- PENDING LEAVES ---
     const pendingLeaves = await prisma.leaveRequest.findMany({
@@ -162,9 +171,39 @@ export const getDashboard = async (userId: string) => {
         reason: l.type,
     }));
 
+    // --- FULL WEEKLY TIMETABLE FOR MY CLASSES PAGE ---
+    const allSchedules = await prisma.timetableSchedule.findMany({
+        where: { facultyId: userId },
+        include: {
+            subject: { select: { name: true, code: true } }
+        },
+        orderBy: { startTime: 'asc' }
+    });
+
+    const dayDisplayMap: Record<string, string> = {
+        MONDAY: 'Monday', TUESDAY: 'Tuesday', WEDNESDAY: 'Wednesday',
+        THURSDAY: 'Thursday', FRIDAY: 'Friday', SATURDAY: 'Saturday', SUNDAY: 'Sunday'
+    };
+
+    const timetable: Record<string, any[]> = {};
+    for (const s of allSchedules) {
+        const dayName = dayDisplayMap[s.dayOfWeek] ?? s.dayOfWeek;
+        if (!timetable[dayName]) timetable[dayName] = [];
+        timetable[dayName].push({
+            scheduleId: s.id,
+            subject_name: s.subject.name,
+            subject_code: s.subject.code,
+            division: s.division || 'A',
+            start_time: s.startTime.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+            end_time: s.endTime.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+            type: s.type,
+        });
+    }
+
     return {
         faculty: { firstName: faculty.firstName, lastName: faculty.lastName },
         todaysClasses,
+        timetable,
         liveSession,
         atRiskStudents,
         pendingLeaves: pendingLeavesData,
@@ -433,7 +472,7 @@ export const startSession = async (userId: string, scheduleId: string) => {
             role: 'STUDENT',
             departmentId: schedule.departmentId,
             semester: schedule.semester,
-            division: schedule.division,
+            ...(schedule.division ? { division: schedule.division } : {}),
         },
         select: { id: true, firstName: true, lastName: true, identifier: true }
     });
@@ -459,9 +498,7 @@ export const startSession = async (userId: string, scheduleId: string) => {
         subjectName: schedule.subject.name,
         subjectCode: schedule.subject.code,
         qrToken,
-        presentStudents,
-        absentStudents,
-        totalStudents: students.length,
+        students,
     };
 };
 
@@ -493,7 +530,7 @@ export const endSession = async (userId: string, sessionId: string) => {
             role: 'STUDENT',
             departmentId: session.schedule.departmentId,
             semester: session.schedule.semester,
-            division: session.schedule.division,
+            ...(session.schedule.division ? { division: session.schedule.division } : {}),
         },
         select: { id: true }
     });

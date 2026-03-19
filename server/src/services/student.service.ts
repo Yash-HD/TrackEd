@@ -326,14 +326,62 @@ export const scanQR = async (
 
     try {
         getIO().to(payload.sessionId).emit('student_joined', {
-            id: studentInfo?.identifier,
-            name: `${studentInfo?.firstName} ${studentInfo?.lastName}`,
-            studentId: userId,
+            id: userId,
+            identifier: studentInfo?.identifier,
+            firstName: studentInfo?.firstName,
+            lastName: studentInfo?.lastName,
         });
     } catch { /* socket not initialised in tests */ }
+
 
     return {
         attendanceId: attendance.id,
         message: `Attendance Marked for ${schedule.subject.name}!`,
     };
+};
+
+export const getAttendanceHistory = async (userId: string, limit: number = 20, subjectId?: string) => {
+    // 1. Fetch attendance records
+    const attendanceRecords = await prisma.attendance.findMany({
+        where: {
+            studentId: userId,
+            ...(subjectId ? { session: { schedule: { subjectId: subjectId } } } : {}),
+            status: { in: ['PRESENT', 'LATE'] }
+        },
+        take: limit,
+        orderBy: {
+            markedAt: 'desc'
+        },
+        include: {
+            session: {
+                include: {
+                    schedule: {
+                        include: { subject: true }
+                    }
+                }
+            }
+        }
+    });
+
+    const dayDisplayMap: Record<string, string> = {
+        MONDAY: 'Monday', TUESDAY: 'Tuesday', WEDNESDAY: 'Wednesday',
+        THURSDAY: 'Thursday', FRIDAY: 'Friday', SATURDAY: 'Saturday', SUNDAY: 'Sunday'
+    };
+
+    // 2. Format into history cards
+    const historyCards = attendanceRecords.map(record => {
+        const sched = record.session.schedule;
+        const dateObj = record.session.date;
+        return {
+            id: record.id,
+            subjectName: sched.subject.name,
+            subjectCode: sched.subject.code,
+            day: dayDisplayMap[sched.dayOfWeek] || sched.dayOfWeek,
+            date: dateObj.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
+            time: `${sched.startTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })} - ${sched.endTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })}`,
+            status: record.status
+        };
+    });
+
+    return { history: historyCards };
 };

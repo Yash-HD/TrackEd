@@ -29,7 +29,10 @@ const port = process.env.PORT || 5000;
 initSocket(server);
 
 // --- Global Middleware ---
-app.use(cors());
+app.use(cors({
+  origin: "https://w6txh4kf-3000.inc1.devtunnels.ms",
+  credentials: true
+}));
 app.use(express.json());
 
 // --- Health Routes ---

@@ -40,6 +40,6 @@
     "typescript": "^5.9.3"
   },
   "prisma": {
-    "seed": "ts-node --compilerOptions {\\\"module\\\":\\\"CommonJS\\\"} prisma/seed.ts"
+    "seed": "ts-node --esm prisma/seed.ts"
   }
 }

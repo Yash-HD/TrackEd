@@ -3,7 +3,7 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth.js';
 import { authorize } from '../middleware/auth.js';
-import { dashboard, timetable, attendance, scanAttendance } from '../controllers/student.controller.js';
+import { dashboard, timetable, attendance, scanAttendance, attendanceHistory } from '../controllers/student.controller.js';
 
 const router = Router();
 
@@ -21,5 +21,8 @@ router.get('/attendance', attendance);
 
 // POST /api/student/attendance/scan
 router.post('/attendance/scan', scanAttendance);
+
+// GET /api/student/attendance/history
+router.get('/attendance/history', attendanceHistory);
 
 export default router;
